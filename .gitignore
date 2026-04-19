@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.tox/
+.venv/
+venv/
+env/
+.DS_Store
+replication.tar.gz
+repl*.tar.gz
