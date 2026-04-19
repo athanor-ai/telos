@@ -31,19 +31,30 @@ def compile(spec_file: str, out_dir: str) -> None:
     out.mkdir(parents=True, exist_ok=True)
     click.echo(f"[telos compile] {spec_file} → {out_dir}/")
     click.echo(f"  protocol: {spec.protocol.name}")
-    click.echo(f"  {len(spec.theorems)} theorem(s), {len(spec.protocol.substeps)} substep(s)")
-    click.echo("  backends to run at verify time:")
+    click.echo(
+        f"  {len(spec.theorems)} theorem(s), {len(spec.protocol.substeps)} substep(s)"
+    )
+
+    emitted: list[Path] = []
     if spec.verifiers.lean4:
-        click.echo("    lean4")
+        from telos.backends.lean4 import compile_lean4
+        files = compile_lean4(spec, out)
+        emitted.extend(files)
+        click.echo(f"    lean4     → {len(files)} files")
     if spec.verifiers.dafny:
-        click.echo("    dafny")
+        from telos.backends.dafny import compile_dafny
+        files = compile_dafny(spec, out)
+        emitted.extend(files)
+        click.echo(f"    dafny     → {len(files)} files")
     if spec.verifiers.ebmc:
-        click.echo("    ebmc")
+        click.echo("    ebmc      → [v0.2 stub; see telos/backends/ebmc.py]")
     if spec.verifiers.hypothesis:
-        click.echo("    hypothesis")
+        click.echo("    hypothesis → [v0.2 stub]")
     if spec.verifiers.cpu_sim:
-        click.echo("    cpu_sim")
-    click.echo("  [0.1] backend emit stubs — see telos/backends/*.py")
+        click.echo("    cpu_sim    → [v0.2 stub]")
+
+    click.echo()
+    click.echo(f"  emitted {len(emitted)} file(s) under {out}/")
 
 
 @main.command()
