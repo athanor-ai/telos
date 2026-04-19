@@ -62,7 +62,7 @@ protocol:
     # --- Kernel-fidelity substeps ---
     - name: inflight_bounds_update
       modifies: [inflight_lo, inflight_hi]
-      inline_lean: "(max 1 (inflight_lo * 0.85), inflight_hi * 1.25)"
+      inline_lean: "(max 1 (inflight_lo * 17 / 20), inflight_hi * 5 / 4)"
       doc: >
         Tracks the inflight_lo / inflight_hi envelope the kernel
         maintains around inflight. Does not affect pacing_rate
