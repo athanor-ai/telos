@@ -1,0 +1,40 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install telos + dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Smoke-test: setup.sh
+        run: |
+          bash setup.sh
+          telos --help
+
+      - name: Smoke-test: parse every example spec
+        run: pytest -v tests/
+
+      - name: Smoke-test: CLI compile / verify / pack
+        run: |
+          telos compile examples/bbrv3-starvation.yaml --out build/
+          telos verify  examples/bbrv3-starvation.yaml
+          telos pack    examples/bbrv3-starvation.yaml --out /tmp/repl.tar.gz

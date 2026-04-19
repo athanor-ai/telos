@@ -1,0 +1,78 @@
+# Example spec: BBRv3 starvation under ACK aggregation.
+# Matches the theorem in OnsetTheorem.lean and the extended
+# paper's §III statement.
+
+version: "0.1"
+
+protocol:
+  name: bbrv3
+  citation: "draft-ietf-ccwg-bbr-05"
+  state:
+    - { name: pacing_rate,  type: real,               doc: "bytes per second" }
+    - { name: bw_filt,      type: "Fin W -> real",    doc: "windowed bw filter, index 0 = youngest" }
+    - { name: min_rtt_filt, type: "Fin W -> real",    doc: "min-RTT filter, index 0 = youngest" }
+    - { name: cwnd_gain,    type: real,               doc: "draft default 2.0" }
+    - { name: pacing_gain,  type: real,               doc: "cycles {5/4, 3/4, 1, 1, 1, 1, 1, 1}" }
+    - { name: phase,        type: "Fin 8",            doc: "pacing-gain cycle index" }
+    - { name: inflight,     type: nat }
+    - { name: rt_elapsed,   type: real }
+  params:
+    - { name: W, type: nat, doc: "min-RTT filter window width" }
+    - { name: D, type: nat, doc: "equilibrium path delay in RTT units" }
+    - { name: B, type: nat, doc: "ACK aggregation burst magnitude" }
+  substeps:
+    - name: filter_update
+      modifies: [min_rtt_filt, rt_elapsed]
+      inline_lean: "slide_in s.min_rtt_filt a.wall_clock"
+    - name: bandwidth_update
+      modifies: [bw_filt, pacing_rate]
+      inline_lean: "windowed_max (slide_in s.bw_filt (delivered / (wall_clock + 1)))"
+    - name: mode_transition
+      modifies: [mode]
+      inline_lean: "match s.mode with | Startup => Drain | Drain => ProbeBW | ProbeBW => ProbeBW | ProbeRTT => ProbeBW"
+    - name: pacing_gain_cycle
+      modifies: [phase, pacing_gain]
+      inline_lean: "((phase + 1) % 8, gain_of_phase _)"
+    - name: cwnd_compute
+      modifies: [pacing_rate]
+      inline_lean: "min (pacing_rate * pacing_gain) (pacing_rate * cwnd_gain)"
+  step_compose:
+    - filter_update
+    - bandwidth_update
+    - mode_transition
+    - pacing_gain_cycle
+    - cwnd_compute
+
+theorems:
+  - name: starves_within
+    kind: negative
+    doc: "under clocked ACK aggregation with B > 2D, pacing_rate reaches 0 by T(B, D) = (B/D - 2) * W + c."
+    hypotheses:
+      - "params.B > 2 * params.D"
+      - "forall k, exists j, k <= j < k + params.W, (schedule j).delivered = 0"
+      - "forall n, 0 <= (t.state n).pacing_rate"
+    conclusion: "exists n, n <= (params.B / params.D - 2) * params.W + c, (t.state n).pacing_rate = 0"
+
+verifiers:
+  lean4:
+    toolchain: "leanprover/lean4:v4.14.0"
+    mathlib: pinned
+  dafny:
+    container: "ghcr.io/athanor-ai/dafny-base:2026.04.10"
+  ebmc:
+    k_induction: true
+    bmc_bound: 100
+    concrete_tuple: { W: 4, D: 2, B: 7 }
+  hypothesis:
+    examples: 5000
+    profile: ci
+  cpu_sim:
+    grid:
+      B: [3, 4, 5, 6, 7]
+      D: [1, 5, 10]
+    seeds: 100
+    t_max_s: 60.0
+
+replication:
+  docker_base: "ubuntu:22.04"
+  expected_runtime_minutes: 15
