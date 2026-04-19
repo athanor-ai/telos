@@ -1,0 +1,11 @@
+telos maintainers
+=================
+
+For questions, bug reports, and retrofit collaborations, please
+open an issue at https://github.com/athanor-ai/telos/issues.
+
+The project welcomes contributions. See docs/CONTRIBUTING.md (to
+be written in v0.3) for guidance on proposing new spec schema
+extensions, new backends, or new retrofit docs.
+
+License: MIT (see LICENSE).
