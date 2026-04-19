@@ -38,13 +38,21 @@ def _module(name: str) -> str:
 
 
 def _dafny_type(t: str) -> str:
-    """Translate spec type to Dafny."""
+    """Translate spec type to Dafny.
+
+    Dafny is simpler than Lean: bounded integer domains like
+    Lean's `Fin W` don't have a direct equivalent, so we coerce
+    them to `nat` with an implicit upper-bound invariant (users
+    add a `requires field < W` on consumers). Function types over
+    a `Fin W` domain become `seq<real>` of length W.
+    """
     if t == "real":
         return "real"
     if t == "nat":
         return "nat"
+    if t.startswith("Fin "):
+        return "nat"
     if "->" in t:
-        # function types become seq<real> for simplicity in v0.2.
         return "seq<real>"
     return t
 

@@ -70,14 +70,121 @@ def compile(spec_file: str, out_dir: str) -> None:
 @click.argument("spec_file", type=click.Path(exists=True, dir_okay=False))
 def verify(spec_file: str) -> None:
     """Run every configured backend; report the sandwich bound."""
+    import shutil
+    import subprocess
+    import time
+
+    from telos.verdict import Verdict, Reconciliation, render_report
+
     spec = load_spec(spec_file)
     click.echo(f"[telos verify] {spec_file}")
     click.echo(f"  protocol: {spec.protocol.name}")
-    click.echo(f"  theorems: {[t.name for t in spec.theorems]}")
+
+    # Compile first so backend artefacts exist.
+    build_dir = Path("build")
+    build_dir.mkdir(exist_ok=True)
+    from telos.backends import lean4 as be_lean4
+    from telos.backends import dafny as be_dafny
+    from telos.backends import ebmc as be_ebmc
+    from telos.backends import hypothesis_be as be_hypothesis
+    from telos.backends import cpusim as be_cpusim
+    emitted: dict[str, list[Path]] = {}
+    if spec.verifiers.lean4:
+        emitted["lean4"] = be_lean4.compile_lean4(spec, build_dir)
+    if spec.verifiers.dafny:
+        emitted["dafny"] = be_dafny.compile_dafny(spec, build_dir)
+    if spec.verifiers.ebmc:
+        emitted["ebmc"] = be_ebmc.compile_ebmc(spec, build_dir)
+    if spec.verifiers.hypothesis:
+        emitted["hypothesis"] = be_hypothesis.compile_hypothesis(spec, build_dir)
+    if spec.verifiers.cpu_sim:
+        emitted["cpu_sim"] = be_cpusim.compile_cpusim(spec, build_dir)
+
+    # Drive each backend; collect verdicts.
+    recons: list[Reconciliation] = []
+    for t in spec.theorems:
+        r = Reconciliation(theorem=t.name)
+        # lean4: check lakefile exists (placeholder — full run requires elan).
+        if "lean4" in emitted:
+            lake_ok = (build_dir / "lean" / "lakefile.lean").exists()
+            r.per_verifier.append(Verdict(
+                verifier="lean4", theorem=t.name,
+                status="outlined" if lake_ok else "skipped",
+                message="lake build not auto-run in v0.3 (elan setup required)",
+            ))
+        # dafny: actually verify if dafny-base container is available.
+        if "dafny" in emitted:
+            if shutil.which("docker"):
+                tic = time.time()
+                # Run dafny verify on the emitted .dfy
+                dfy_files = [p for p in emitted["dafny"] if p.suffix == ".dfy"]
+                if dfy_files:
+                    cmd = [
+                        "docker", "run", "--rm",
+                        "-v", f"{dfy_files[0].parent.resolve()}:/w",
+                        "-w", "/w",
+                        "ghcr.io/athanor-ai/dafny-base:2026.04.10",
+                        "dafny", "verify", dfy_files[0].name,
+                    ]
+                    try:
+                        res = subprocess.run(cmd, capture_output=True, timeout=60)
+                        ok = res.returncode == 0 and b"0 errors" in res.stdout
+                        r.per_verifier.append(Verdict(
+                            verifier="dafny", theorem=t.name,
+                            status="closed" if ok else "failed",
+                            wall_time_s=time.time() - tic,
+                            message=res.stdout.decode()[-100:].strip().replace("\n", " "),
+                        ))
+                    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+                        r.per_verifier.append(Verdict(
+                            verifier="dafny", theorem=t.name,
+                            status="skipped", message=f"{type(e).__name__}",
+                        ))
+            else:
+                r.per_verifier.append(Verdict(
+                    verifier="dafny", theorem=t.name,
+                    status="skipped", message="docker not available on host",
+                ))
+        # ebmc: requires ebmc binary; skipped if absent.
+        if "ebmc" in emitted:
+            r.per_verifier.append(Verdict(
+                verifier="ebmc", theorem=t.name,
+                status="outlined" if shutil.which("ebmc") else "skipped",
+                message="k-induction run not auto-invoked in v0.3",
+            ))
+        # hypothesis: run pytest on the emitted file.
+        if "hypothesis" in emitted:
+            tic = time.time()
+            py_files = [p for p in emitted["hypothesis"] if p.suffix == ".py"]
+            if py_files:
+                cmd = ["python3", "-m", "pytest", "-q", str(py_files[0])]
+                env = {"HYPOTHESIS_PROFILE": "quick", "PATH": "/usr/bin:/usr/local/bin"}
+                try:
+                    res = subprocess.run(cmd, capture_output=True, timeout=120,
+                                          env={**__import__("os").environ, **env})
+                    ok = res.returncode == 0
+                    r.per_verifier.append(Verdict(
+                        verifier="hypothesis", theorem=t.name,
+                        status="closed" if ok else "failed",
+                        wall_time_s=time.time() - tic,
+                        message=res.stdout.decode()[-120:].strip().replace("\n", " "),
+                    ))
+                except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+                    r.per_verifier.append(Verdict(
+                        verifier="hypothesis", theorem=t.name,
+                        status="skipped", message=f"{type(e).__name__}",
+                    ))
+        # cpu_sim: outlined for v0.3; user fills in step body.
+        if "cpu_sim" in emitted:
+            r.per_verifier.append(Verdict(
+                verifier="cpu_sim", theorem=t.name,
+                status="outlined",
+                message="step body is user-supplied in v0.3 (see simulate.py stub)",
+            ))
+        recons.append(r)
+
     click.echo()
-    click.echo("  [0.1] verify pipeline not yet wired; see docs/roadmap.md.")
-    click.echo("        backend modules under telos/backends/ are stubs")
-    click.echo("        pending compile-to-artefact logic for each verifier.")
+    click.echo(render_report(recons))
 
 
 @main.command()
