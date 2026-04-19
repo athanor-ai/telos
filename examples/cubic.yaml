@@ -65,7 +65,7 @@ verifiers:
       construction; congestion_event then cwnd_floor; cubic_grow
       is monotone-non-decreasing from a positive floor).
   dafny:
-    container: "ghcr.io/athanor-ai/dafny-base:2026.04.10"
+    container: "ghcr.io/<anon>/dafny-base:2026.04.10"
   ebmc:
     k_induction: true
     bmc_bound: 50

@@ -62,7 +62,7 @@ verifiers:
       then adds a non-negative term. Every substep preserves
       the invariant cwnd >= MSS.
   dafny:
-    container: "ghcr.io/athanor-ai/dafny-base:2026.04.10"
+    container: "ghcr.io/<anon>/dafny-base:2026.04.10"
   ebmc:
     k_induction: true
     bmc_bound: 50
