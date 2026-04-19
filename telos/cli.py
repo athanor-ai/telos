@@ -52,9 +52,15 @@ def compile(spec_file: str, out_dir: str) -> None:
         emitted.extend(files)
         click.echo(f"    ebmc      → {len(files)} files")
     if spec.verifiers.hypothesis:
-        click.echo("    hypothesis → [v0.2 stub]")
+        from telos.backends.hypothesis_be import compile_hypothesis
+        files = compile_hypothesis(spec, out)
+        emitted.extend(files)
+        click.echo(f"    hypothesis → {len(files)} files")
     if spec.verifiers.cpu_sim:
-        click.echo("    cpu_sim    → [v0.2 stub]")
+        from telos.backends.cpusim import compile_cpusim
+        files = compile_cpusim(spec, out)
+        emitted.extend(files)
+        click.echo(f"    cpu_sim    → {len(files)} files")
 
     click.echo()
     click.echo(f"  emitted {len(emitted)} file(s) under {out}/")
