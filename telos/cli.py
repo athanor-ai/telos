@@ -104,14 +104,46 @@ def verify(spec_file: str) -> None:
     recons: list[Reconciliation] = []
     for t in spec.theorems:
         r = Reconciliation(theorem=t.name)
-        # lean4: check lakefile exists (placeholder — full run requires elan).
+        # lean4: run `lake build` on the emitted project; count sorry.
         if "lean4" in emitted:
-            lake_ok = (build_dir / "lean" / "lakefile.lean").exists()
-            r.per_verifier.append(Verdict(
-                verifier="lean4", theorem=t.name,
-                status="outlined" if lake_ok else "skipped",
-                message="lake build not auto-run in v0.3 (elan setup required)",
-            ))
+            lean_dir = build_dir / "lean"
+            lake_ok = (lean_dir / "lakefile.lean").exists()
+            if lake_ok and shutil.which("lake"):
+                tic = time.time()
+                try:
+                    res = subprocess.run(
+                        ["lake", "build"], cwd=lean_dir,
+                        capture_output=True, timeout=1200,
+                    )
+                    ok = res.returncode == 0
+                    # Count sorry occurrences (v0.5 proxy; a real
+                    # reviewer uses #print axioms for rigor).
+                    sorry_count = 0
+                    for p in lean_dir.rglob("*.lean"):
+                        sorry_count += p.read_text(
+                            errors="replace").count("sorry")
+                    r.per_verifier.append(Verdict(
+                        verifier="lean4", theorem=t.name,
+                        status="closed" if ok and sorry_count == 0
+                               else ("outlined" if ok else "failed"),
+                        wall_time_s=time.time() - tic,
+                        sorry_count=sorry_count,
+                        message=res.stdout.decode()[-120:].strip().replace("\n", " ")
+                                or res.stderr.decode()[-120:].strip().replace("\n", " "),
+                    ))
+                except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+                    r.per_verifier.append(Verdict(
+                        verifier="lean4", theorem=t.name,
+                        status="skipped", message=f"{type(e).__name__}",
+                    ))
+            else:
+                r.per_verifier.append(Verdict(
+                    verifier="lean4", theorem=t.name,
+                    status="skipped" if not lake_ok
+                           else "outlined",
+                    message="lake not on PATH" if lake_ok
+                            else "lakefile.lean not emitted",
+                ))
         # dafny: actually verify if dafny-base container is available.
         if "dafny" in emitted:
             if shutil.which("docker"):
@@ -145,13 +177,47 @@ def verify(spec_file: str) -> None:
                     verifier="dafny", theorem=t.name,
                     status="skipped", message="docker not available on host",
                 ))
-        # ebmc: requires ebmc binary; skipped if absent.
+        # ebmc: run k-induction on the emitted SV; parse verdict.
         if "ebmc" in emitted:
-            r.per_verifier.append(Verdict(
-                verifier="ebmc", theorem=t.name,
-                status="outlined" if shutil.which("ebmc") else "skipped",
-                message="k-induction run not auto-invoked in v0.3",
-            ))
+            if shutil.which("ebmc"):
+                sv_files = [p for p in emitted["ebmc"] if p.suffix == ".sv"]
+                inv = next((p for p in sv_files
+                            if "invariants" in p.name), None)
+                trc = next((p for p in sv_files
+                            if "trace" in p.name), None)
+                if inv and trc:
+                    tic = time.time()
+                    cmd = ["ebmc", str(inv), str(trc),
+                           "--top", inv.stem, "--k-induction"]
+                    try:
+                        res = subprocess.run(
+                            cmd, capture_output=True, timeout=300)
+                        out = res.stdout.decode()
+                        proved = out.count("PROVED")
+                        failed = out.count("REFUTED") + out.count("UNKNOWN")
+                        ok = res.returncode == 0 and proved > 0 and failed == 0
+                        r.per_verifier.append(Verdict(
+                            verifier="ebmc", theorem=t.name,
+                            status="closed" if ok else "failed",
+                            wall_time_s=time.time() - tic,
+                            message=f"{proved} PROVED, {failed} non-proved",
+                        ))
+                    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+                        r.per_verifier.append(Verdict(
+                            verifier="ebmc", theorem=t.name,
+                            status="skipped", message=f"{type(e).__name__}",
+                        ))
+                else:
+                    r.per_verifier.append(Verdict(
+                        verifier="ebmc", theorem=t.name,
+                        status="outlined",
+                        message="SV files emitted but top module not identified",
+                    ))
+            else:
+                r.per_verifier.append(Verdict(
+                    verifier="ebmc", theorem=t.name,
+                    status="skipped", message="ebmc not on PATH",
+                ))
         # hypothesis: run pytest on the emitted file.
         if "hypothesis" in emitted:
             tic = time.time()
