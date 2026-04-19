@@ -15,18 +15,21 @@ package.
 telos verify examples/bbrv3-starvation.yaml
 ```
 
-Expected output:
+Expected output (on the BBRv3 example, ~5 s on 16 vCPU):
 
 ```
-[Lean 4]      starves_within            — sorry-free
-[Dafny]       BBRv3Trace                — 25 verified, 0 errors
-[EBMC]        p_onset_upper_bound       — PROVED at k=100
-[Hypothesis]  5000/5000 pass
-[CPU sim]     40/40 starve under quiescent schedule
-
-SANDWICH BOUND: T(B, D) = (B/D - 2) * W + c
-                |residual| <= 1 RTT on > 99% of 1,200 cells
+[starves_within]
+  ✓ lean4       closed    wellformed skeleton, zero unproved
+  ✓ dafny       closed    5 verified, 0 errors
+  ✓ ebmc        closed    4 PROVED, 0 non-proved
+  ✓ hypothesis  closed    1 passed (5000 examples)
+  … cpu_sim     outlined  user-supplied step body
+  SANDWICH: closed by 4 backends
 ```
+
+A *wellformed* verdict means the emitted Lean skeleton typechecks
+with no unproved obligations; supplying your own proof module
+upgrades it to *proved*.
 
 ## What this is for
 
@@ -45,9 +48,11 @@ backends that disagree expose a real bug.
 
 | Spec | Theorem | Result |
 |------|---------|--------|
-| `examples/bbrv3-starvation.yaml` | BBRv3 starves under B > 2D | 5-backend agreement |
-| `examples/bbrv3-fstar.yaml` | The patched filter F* never starves | 5-backend agreement |
-| `examples/cubic-toy.yaml` | Cubic reaches steady-state throughput | template for your own CCA |
+| `examples/bbrv3-starvation.yaml` | BBRv3 starves under B > 2D | 4-backend mechanical sandwich + cpu_sim outlined |
+
+Community retrofits planned for `examples/` include a Cubic-toy
+spec and the patched-filter F\* variant (see
+`docs/retrofits/` for each target's adaptation notes).
 
 ## Retrofit targets (community wishlist)
 
