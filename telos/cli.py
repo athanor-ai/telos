@@ -47,7 +47,10 @@ def compile(spec_file: str, out_dir: str) -> None:
         emitted.extend(files)
         click.echo(f"    dafny     → {len(files)} files")
     if spec.verifiers.ebmc:
-        click.echo("    ebmc      → [v0.2 stub; see telos/backends/ebmc.py]")
+        from telos.backends.ebmc import compile_ebmc
+        files = compile_ebmc(spec, out)
+        emitted.extend(files)
+        click.echo(f"    ebmc      → {len(files)} files")
     if spec.verifiers.hypothesis:
         click.echo("    hypothesis → [v0.2 stub]")
     if spec.verifiers.cpu_sim:
