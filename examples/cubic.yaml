@@ -1,0 +1,85 @@
+# Example spec: CUBIC never starves under any bounded ACK schedule.
+# Corollary of telos to the Reno / AIMD family: CUBIC's cwnd is
+# lower-bounded by 1 MSS on every RTT by construction, so the
+# starvation predicate `pacing_rate = 0` is unreachable.
+
+version: "0.1"
+
+protocol:
+  name: cubic
+  citation: "rfc9438"
+  state:
+    - { name: cwnd,          type: real, doc: "congestion window, bytes" }
+    - { name: W_max,         type: real, doc: "window size at last congestion event" }
+    - { name: t_last_event,  type: real, doc: "wall-clock of last congestion event" }
+    - { name: ssthresh,      type: real, doc: "slow-start threshold" }
+    - { name: pacing_rate,   type: real, doc: "bytes per second = cwnd / srtt" }
+    - { name: srtt,          type: real, doc: "smoothed RTT, positive" }
+  params:
+    - { name: MSS,  type: real, doc: "maximum segment size in bytes" }
+    - { name: C,    type: real, doc: "CUBIC cubic-scaling constant (0.4 per RFC 9438)" }
+    - { name: beta, type: real, doc: "multiplicative-decrease factor (0.7 per RFC 9438)" }
+  substeps:
+    - name: cubic_grow
+      modifies: [cwnd]
+      inline_lean: "cwnd + params.C * (t_since_event cwnd)^3"
+      doc: "concave growth from (t_last_event, beta * W_max) to W_max, convex thereafter"
+    - name: congestion_event
+      modifies: [cwnd, W_max, t_last_event, ssthresh]
+      inline_lean: "(params.beta * cwnd, cwnd, now, params.beta * cwnd)"
+      doc: "on ECN / loss: cwnd := beta * cwnd, never below 1 MSS"
+    - name: cwnd_floor
+      modifies: [cwnd]
+      inline_lean: "max params.MSS cwnd"
+      doc: "RFC 9438 mandates cwnd >= 1 MSS always"
+    - name: pacing_compute
+      modifies: [pacing_rate]
+      inline_lean: "cwnd / srtt"
+  step_compose:
+    - cubic_grow
+    - congestion_event
+    - cwnd_floor
+    - pacing_compute
+
+theorems:
+  - name: no_starvation_under_bounded_ack
+    kind: positive
+    doc: >
+      CUBIC never starves on a bounded-ACK schedule.
+      Formally: for any trace t with srtt > 0 and params.MSS > 0,
+      (t.state n).pacing_rate > 0 for every tick n.
+    hypotheses:
+      - "params.MSS > 0"
+      - "forall n, (t.state n).srtt > 0"
+      - "(t.state 0).cwnd >= params.MSS"
+    conclusion: "forall n, (t.state n).pacing_rate > 0"
+
+verifiers:
+  lean4:
+    toolchain: "leanprover/lean4:v4.14.0"
+    mathlib: pinned
+    proof_sketch: >
+      Structural induction on n. Base case: cwnd >= MSS > 0 and
+      srtt > 0, so pacing_rate = cwnd / srtt > 0. Step case: each
+      of the four substeps preserves cwnd >= MSS (cwnd_floor by
+      construction; congestion_event then cwnd_floor; cubic_grow
+      is monotone-non-decreasing from a positive floor).
+  dafny:
+    container: "ghcr.io/athanor-ai/dafny-base:2026.04.10"
+  ebmc:
+    k_induction: true
+    bmc_bound: 50
+    concrete_tuple: { MSS: 1500, C: 0.4, beta: 0.7 }
+  hypothesis:
+    examples: 5000
+    profile: ci
+  cpu_sim:
+    grid:
+      burst_size: [1, 4, 8, 16]
+      rtt_ms:     [1, 10, 100]
+    seeds: 50
+    t_max_s: 30.0
+
+replication:
+  docker_base: "ubuntu:22.04"
+  expected_runtime_minutes: 10

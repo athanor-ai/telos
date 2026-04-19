@@ -1,0 +1,82 @@
+# Example spec: Reno never starves under any bounded ACK schedule.
+# The AIMD invariant (additive increase per RTT, multiplicative
+# decrease on loss with cwnd bounded below by 1 MSS) rules out
+# pacing_rate = 0 on any trace with srtt > 0.
+
+version: "0.1"
+
+protocol:
+  name: reno
+  citation: "rfc5681"
+  state:
+    - { name: cwnd,        type: real, doc: "congestion window, bytes" }
+    - { name: ssthresh,    type: real, doc: "slow-start threshold" }
+    - { name: pacing_rate, type: real, doc: "bytes per second = cwnd / srtt" }
+    - { name: srtt,        type: real, doc: "smoothed RTT" }
+    - { name: in_slow_start, type: bool, doc: "TCP slow-start flag" }
+  params:
+    - { name: MSS, type: real, doc: "maximum segment size in bytes" }
+  substeps:
+    - name: aimd_increase
+      modifies: [cwnd]
+      inline_lean: "if in_slow_start then cwnd + params.MSS else cwnd + params.MSS^2 / cwnd"
+      doc: "AI: exponential in slow-start, +1 MSS per RTT thereafter"
+    - name: aimd_decrease
+      modifies: [cwnd, ssthresh]
+      inline_lean: "(cwnd / 2, cwnd / 2)"
+      doc: "MD on loss: cwnd := cwnd / 2, never below 1 MSS"
+    - name: cwnd_floor
+      modifies: [cwnd]
+      inline_lean: "max params.MSS cwnd"
+      doc: "RFC 5681: cwnd >= 1 MSS always"
+    - name: pacing_compute
+      modifies: [pacing_rate]
+      inline_lean: "cwnd / srtt"
+  step_compose:
+    - aimd_increase
+    - aimd_decrease
+    - cwnd_floor
+    - pacing_compute
+
+theorems:
+  - name: no_starvation_under_bounded_ack
+    kind: positive
+    doc: >
+      Reno never starves on a bounded-ACK schedule.
+      (t.state n).pacing_rate > 0 for every tick n, given a
+      positive MSS and positive srtt on every tick.
+    hypotheses:
+      - "params.MSS > 0"
+      - "forall n, (t.state n).srtt > 0"
+      - "(t.state 0).cwnd >= params.MSS"
+    conclusion: "forall n, (t.state n).pacing_rate > 0"
+
+verifiers:
+  lean4:
+    toolchain: "leanprover/lean4:v4.14.0"
+    mathlib: pinned
+    proof_sketch: >
+      Structural induction on n.
+      Base: cwnd >= MSS > 0 and srtt > 0, so pacing_rate > 0.
+      Step: cwnd_floor clips the MD step back to MSS >= 1; AI
+      then adds a non-negative term. Every substep preserves
+      the invariant cwnd >= MSS.
+  dafny:
+    container: "ghcr.io/athanor-ai/dafny-base:2026.04.10"
+  ebmc:
+    k_induction: true
+    bmc_bound: 50
+    concrete_tuple: { MSS: 1500 }
+  hypothesis:
+    examples: 5000
+    profile: ci
+  cpu_sim:
+    grid:
+      burst_size: [1, 2, 4, 8]
+      rtt_ms:     [1, 10, 100]
+    seeds: 50
+    t_max_s: 30.0
+
+replication:
+  docker_base: "ubuntu:22.04"
+  expected_runtime_minutes: 8
