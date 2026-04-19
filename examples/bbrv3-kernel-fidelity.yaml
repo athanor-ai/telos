@@ -1,0 +1,141 @@
+# Example spec: BBRv3 with kernel-fidelity state extensions.
+#
+# Extends examples/bbrv3-starvation.yaml to cover the four state
+# fields in Linux tcp_bbr.c that the 5-substep abstraction ignores:
+#
+#   inflight_lo       — lower bound on in-flight bytes (BBRv3 §4.5.1)
+#   inflight_hi       — upper bound on in-flight bytes (BBRv3 §4.5.2)
+#   lt_bw_sampling    — long-term bandwidth sampling state machine
+#                       (BBRv3 §4.5.3, buffer-bloat detection)
+#   packets_in_flight — kernel-internal counter used by
+#                       tcp_bbr_check_full_bw (BBRv3 §4.5.4)
+#
+# Hypothesis: under the core spec's (W, D, B) regime, adding these
+# fields does NOT change the starvation onset T(B, D) up to a
+# constant, because they affect mode transitions rather than the
+# windowed max inside ProbeBW. The extended spec should verify the
+# same starvation theorem with the same bound, within a residual
+# measured against the Linux kernel binary (see §V.F).
+
+version: "0.1"
+
+protocol:
+  name: bbrv3_kernel_fidelity
+  citation: "draft-ietf-ccwg-bbr-05 + Linux tcp_bbr.c"
+  state:
+    # --- Core 5-substep fields (mirror bbrv3-starvation.yaml) ---
+    - { name: pacing_rate,       type: real,               doc: "bytes per second" }
+    - { name: bw_filt,           type: "Fin W -> real",    doc: "windowed bw filter, index 0 = youngest" }
+    - { name: min_rtt_filt,      type: "Fin W -> real",    doc: "min-RTT filter, index 0 = youngest" }
+    - { name: cwnd_gain,         type: real,               doc: "draft default 2.0" }
+    - { name: pacing_gain,       type: real,               doc: "cycles {5/4, 3/4, 1, 1, 1, 1, 1, 1}" }
+    - { name: phase,             type: "Fin 8",            doc: "pacing-gain cycle index" }
+    - { name: inflight,          type: nat }
+    - { name: rt_elapsed,        type: real }
+    # --- Kernel-fidelity fields (extension) ---
+    - { name: inflight_lo,       type: nat,                doc: "lower bound on in-flight bytes" }
+    - { name: inflight_hi,       type: nat,                doc: "upper bound on in-flight bytes" }
+    - { name: lt_bw,             type: real,               doc: "long-term bandwidth sample" }
+    - { name: lt_is_sampling,    type: bool,               doc: "long-term sampling window active" }
+    - { name: packets_in_flight, type: nat,                doc: "kernel-internal unacked-packets counter" }
+  params:
+    - { name: W, type: nat, doc: "min-RTT filter window width" }
+    - { name: D, type: nat, doc: "equilibrium path delay in RTT units" }
+    - { name: B, type: nat, doc: "ACK aggregation burst magnitude" }
+  substeps:
+    # --- Core 5 substeps ---
+    - name: filter_update
+      modifies: [min_rtt_filt, rt_elapsed]
+      inline_lean: "slide_in s.min_rtt_filt a.wall_clock"
+    - name: bandwidth_update
+      modifies: [bw_filt, pacing_rate]
+      inline_lean: "windowed_max (slide_in s.bw_filt (delivered / (wall_clock + 1)))"
+    - name: mode_transition
+      modifies: [mode]
+      inline_lean: "match s.mode with | Startup => Drain | Drain => ProbeBW | ProbeBW => ProbeBW | ProbeRTT => ProbeBW"
+    - name: pacing_gain_cycle
+      modifies: [phase, pacing_gain]
+      inline_lean: "((phase + 1) % 8, gain_of_phase _)"
+    - name: cwnd_compute
+      modifies: [pacing_rate]
+      inline_lean: "min (pacing_rate * pacing_gain) (pacing_rate * cwnd_gain)"
+    # --- Kernel-fidelity substeps ---
+    - name: inflight_bounds_update
+      modifies: [inflight_lo, inflight_hi]
+      inline_lean: "(max 1 (inflight_lo * 0.85), inflight_hi * 1.25)"
+      doc: >
+        Tracks the inflight_lo / inflight_hi envelope the kernel
+        maintains around inflight. Does not affect pacing_rate
+        inside ProbeBW; relevant only at mode transitions.
+    - name: lt_bw_sampling_tick
+      modifies: [lt_bw, lt_is_sampling]
+      inline_lean: "(if lt_is_sampling then lt_bw else bw_filt[0], not lt_is_sampling)"
+      doc: >
+        Long-term bandwidth sampling. Required to model the
+        Startup -> Drain -> ProbeBW transition the kernel
+        performs on buffer-bloat detection; does not affect
+        starvation inside ProbeBW.
+    - name: packets_in_flight_update
+      modifies: [packets_in_flight]
+      inline_lean: "if a.delivered > 0 then packets_in_flight - 1 else packets_in_flight + 1"
+      doc: >
+        Kernel's unacked-packet counter. Tracked for residual
+        comparison against ss -i output; doesn't enter the
+        sandwich-bound obligation.
+  step_compose:
+    - filter_update
+    - bandwidth_update
+    - mode_transition
+    - pacing_gain_cycle
+    - cwnd_compute
+    - inflight_bounds_update
+    - lt_bw_sampling_tick
+    - packets_in_flight_update
+
+theorems:
+  - name: starves_within_kernel_fidelity
+    kind: negative
+    doc: >
+      The extended spec inherits the same starvation onset bound
+      as the core spec: T(B, D) = (B/D - 2) * W + c. The four
+      kernel-fidelity fields affect mode transitions but not the
+      windowed-max filter inside ProbeBW; the bound survives.
+    hypotheses:
+      - "params.B > 2 * params.D"
+      - "forall k, exists j, k <= j < k + params.W, (schedule j).delivered = 0"
+      - "forall n, 0 <= (t.state n).pacing_rate"
+      - "forall n, (t.state n).inflight_lo <= (t.state n).inflight"
+      - "forall n, (t.state n).inflight <= (t.state n).inflight_hi"
+    conclusion: "exists n, n <= (params.B / params.D - 2) * params.W + c, (t.state n).pacing_rate = 0"
+
+verifiers:
+  lean4:
+    toolchain: "leanprover/lean4:v4.14.0"
+    mathlib: pinned
+    proof_sketch: >
+      Direct reduction to the core spec's starves_within: the
+      three kernel-fidelity substeps are composable with the core
+      5 in a way that preserves the bw_filt drain, because each
+      kernel-fidelity substep modifies a disjoint state field.
+      The hypothesis bank adds inflight_lo <= inflight <= inflight_hi
+      as a structural invariant; this is a pure kernel
+      well-formedness property, unaffected by ACK aggregation.
+  dafny:
+    container: "ghcr.io/<anon>/dafny-base:2026.04.10"
+  ebmc:
+    k_induction: true
+    bmc_bound: 100
+    concrete_tuple: { W: 4, D: 2, B: 7 }
+  hypothesis:
+    examples: 5000
+    profile: ci
+  cpu_sim:
+    grid:
+      B: [3, 4, 5, 6, 7]
+      D: [1, 5, 10]
+    seeds: 100
+    t_max_s: 60.0
+
+replication:
+  docker_base: "ubuntu:22.04"
+  expected_runtime_minutes: 15
