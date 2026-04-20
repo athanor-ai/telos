@@ -105,6 +105,13 @@ class CpuSimConfig(BaseModel):
     grid: dict[str, Union[list[int], list[float], str]]
     seeds: int = 100
     t_max_s: float = 60.0
+    # When set, cpu_sim backend emits a shim that delegates `step(...)` and
+    # `simulate(...)` to the named module instead of the user-filled stub.
+    # The path is resolved relative to the spec-containing repo. Used by
+    # `telos verify` to promote the cpu_sim backend from "outlined" to an
+    # actual runnable closure. Kept separate from the stub mode (v0.3
+    # default) — specs that don't set this keep the original behavior.
+    reference_python: Optional[str] = None
 
 
 class Verifiers(BaseModel):
