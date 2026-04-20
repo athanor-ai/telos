@@ -1,0 +1,33 @@
+Converting
+Type-checking Verilog::bbr3_patched_invariants
+Synthesis Verilog::bbr3_patched_invariants
+file bbr3_patched_trace.sv line 52: Making bbr3_patched_trace(4,2,7,16,2,16).burst_or_one a wire
+file bbr3_patched_trace.sv line 55: Making bbr3_patched_trace(4,2,7,16,2,16).sample_patched a wire
+file bbr3_patched_invariants.sv line 27: Making bbr3_patched_invariants.pacing_rate a wire
+file bbr3_patched_invariants.sv line 28: Making bbr3_patched_invariants.bw_filt a wire
+file bbr3_patched_invariants.sv line 29: Making bbr3_patched_invariants.phase a wire
+file bbr3_patched_invariants.sv line 30: Making bbr3_patched_invariants.tick a wire
+Induction Base
+Generating Decision Problem
+Using MiniSAT 2.2.1 with simplifier
+Properties
+Solving with propositional reduction
+SAT checker inconsistent: instance is UNSATISFIABLE
+UNSAT: No path found within bound
+Induction Step
+Using MiniSAT 2.2.1 with simplifier
+SAT checker: instance is UNSATISFIABLE
+UNSAT: inductive proof successful, property holds
+Using MiniSAT 2.2.1 with simplifier
+SAT checker: instance is UNSATISFIABLE
+UNSAT: inductive proof successful, property holds
+
+** Results:
+[bbr3_patched_invariants.a_burst_bounded] always bbr3_patched_invariants.burst_size <= 8'(bbr3_patched_invariants.B) && bbr3_patched_invariants.burst_size >= 1: ASSUMED
+[bbr3_patched_invariants.a_delivered_bounded] always bbr3_patched_invariants.delivered <= 16'(bbr3_patched_invariants.B * bbr3_patched_invariants.D): ASSUMED
+[bbr3_patched_invariants.a_wall_bounded] always bbr3_patched_invariants.wall_clock <= 4'b0011: ASSUMED
+[bbr3_patched_invariants.a_reset_once] always (bbr3_patched_invariants.tick == 1'b0 |-> bbr3_patched_invariants.reset): ASSUMED
+[bbr3_patched_invariants.a_no_reset_after] always (bbr3_patched_invariants.tick > 1'b0 |-> !bbr3_patched_invariants.reset): ASSUMED
+[bbr3_patched_invariants.p_patched_pacing_rate_positive] always (disable iff (bbr3_patched_invariants.reset) bbr3_patched_invariants.pacing_rate > 1'b0): PROVED
+[bbr3_patched_invariants.p_patched_pacing_rate_lower_bound] always (disable iff (bbr3_patched_invariants.reset) bbr3_patched_invariants.pacing_rate >= 1'b1): PROVED
+[bbr3_patched_invariants.assert.1] 1 << bbr3_patched_invariants.LOG2_W == bbr3_patched_invariants.W: UNSUPPORTED: unsupported by k-induction

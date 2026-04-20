@@ -1,0 +1,6 @@
+B,D,link_rate,seed,T_kernel_ms,T_analytic_ms,residual_ms,peak_bps,method
+8,2,100,0,NA,30,NA,34797384,mahimahi
+12,5,100,0,NA,10,NA,31491112,mahimahi
+10,3,100,0,NA,20,NA,48041432,mahimahi
+16,5,100,0,NA,20,NA,47764648,mahimahi
+20,4,100,0,NA,40,NA,47556104,mahimahi
