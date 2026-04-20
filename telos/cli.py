@@ -58,7 +58,7 @@ def compile(spec_file: str, out_dir: str) -> None:
         click.echo(f"    hypothesis → {len(files)} files")
     if spec.verifiers.cpu_sim:
         from telos.backends.cpusim import compile_cpusim
-        files = compile_cpusim(spec, out)
+        files = compile_cpusim(spec, out, spec_path=Path(spec_file))
         emitted.extend(files)
         click.echo(f"    cpu_sim    → {len(files)} files")
 
@@ -98,7 +98,9 @@ def verify(spec_file: str) -> None:
     if spec.verifiers.hypothesis:
         emitted["hypothesis"] = be_hypothesis.compile_hypothesis(spec, build_dir)
     if spec.verifiers.cpu_sim:
-        emitted["cpu_sim"] = be_cpusim.compile_cpusim(spec, build_dir)
+        emitted["cpu_sim"] = be_cpusim.compile_cpusim(
+            spec, build_dir, spec_path=Path(spec_file)
+        )
 
     # Drive each backend; collect verdicts.
     recons: list[Reconciliation] = []
@@ -240,13 +242,48 @@ def verify(spec_file: str) -> None:
                         verifier="hypothesis", theorem=t.name,
                         status="skipped", message=f"{type(e).__name__}",
                     ))
-        # cpu_sim: outlined for v0.3; user fills in step body.
+        # cpu_sim: when the spec registers a reference_python module,
+        # actually run the emitted shim + report the verdict. When not,
+        # stay in v0.3 "outlined" mode and tell the user to fill the stub.
         if "cpu_sim" in emitted:
-            r.per_verifier.append(Verdict(
-                verifier="cpu_sim", theorem=t.name,
-                status="outlined",
-                message="step body is user-supplied in v0.3 (see simulate.py stub)",
-            ))
+            if spec.verifiers.cpu_sim and spec.verifiers.cpu_sim.reference_python:
+                sim_dir = build_dir / "cpusim"
+                sim_py = sim_dir / "simulate.py"
+                sweep_json = sim_dir / "sweep.json"
+                if not sim_py.exists() or not sweep_json.exists():
+                    r.per_verifier.append(Verdict(
+                        verifier="cpu_sim", theorem=t.name,
+                        status="skipped",
+                        message="cpu_sim emission missing simulate.py or sweep.json",
+                    ))
+                else:
+                    tic = time.time()
+                    try:
+                        import subprocess
+                        res = subprocess.run(
+                            ["python3", str(sim_py), str(sweep_json)],
+                            capture_output=True, timeout=600,
+                        )
+                        ok = res.returncode == 0
+                        r.per_verifier.append(Verdict(
+                            verifier="cpu_sim", theorem=t.name,
+                            status="closed" if ok else "failed",
+                            wall_time_s=time.time() - tic,
+                            message=res.stdout.decode()[-200:].strip().replace("\n", " "),
+                        ))
+                    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+                        r.per_verifier.append(Verdict(
+                            verifier="cpu_sim", theorem=t.name,
+                            status="skipped",
+                            message=f"{type(e).__name__}: {e}"[:120],
+                        ))
+            else:
+                r.per_verifier.append(Verdict(
+                    verifier="cpu_sim", theorem=t.name,
+                    status="outlined",
+                    message="step body is user-supplied in v0.3 (see simulate.py stub); "
+                            "set verifiers.cpu_sim.reference_python to a module to auto-run",
+                ))
         recons.append(r)
 
     click.echo()

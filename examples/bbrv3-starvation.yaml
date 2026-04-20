@@ -72,6 +72,10 @@ verifiers:
       D: [1, 5, 10]
     seeds: 100
     t_max_s: 60.0
+    # Delegate step() + simulate() to this reference Python sim so
+    # `telos verify` actually runs cpu_sim end-to-end (v0.3.1+).
+    # Without this pointer the backend stays in "outlined / stub" mode.
+    reference_python: examples/bbrv3_reference.py
 
 replication:
   docker_base: "ubuntu:22.04"
