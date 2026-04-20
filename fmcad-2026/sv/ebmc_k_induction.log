@@ -1,0 +1,42 @@
+Converting
+Type-checking Verilog::bbr3_invariants
+Synthesis Verilog::bbr3_invariants
+file sv/bbr3_trace.sv line 83: Making bbr3_trace(4,2,7,16).sample a wire
+file sv/bbr3_trace.sv line 87: Making bbr3_trace(4,2,7,16).windowed_max a wire
+file sv/bbr3_trace.sv line 90: Making bbr3_trace(4,2,7,16).km a wire
+file sv/bbr3_invariants.sv line 39: Making bbr3_invariants.pacing_rate a wire
+file sv/bbr3_invariants.sv line 40: Making bbr3_invariants.bw_filt a wire
+file sv/bbr3_invariants.sv line 41: Making bbr3_invariants.min_rtt_filt a wire
+file sv/bbr3_invariants.sv line 42: Making bbr3_invariants.inflight a wire
+file sv/bbr3_invariants.sv line 43: Making bbr3_invariants.phase a wire
+file sv/bbr3_invariants.sv line 44: Making bbr3_invariants.mode a wire
+file sv/bbr3_invariants.sv line 45: Making bbr3_invariants.steps_since_zero a wire
+file sv/bbr3_invariants.sv line 46: Making bbr3_invariants.tick a wire
+Induction Base
+Generating Decision Problem
+Using MiniSAT 2.2.1 with simplifier
+Properties
+Solving with propositional reduction
+SAT checker: instance is UNSATISFIABLE
+UNSAT: No path found within bound
+Induction Step
+Using MiniSAT 2.2.1 with simplifier
+SAT checker: instance is UNSATISFIABLE
+UNSAT: inductive proof successful, property holds
+Using MiniSAT 2.2.1 with simplifier
+SAT checker inconsistent: instance is UNSATISFIABLE
+UNSAT: inductive proof successful, property holds
+Using MiniSAT 2.2.1 with simplifier
+SAT checker: instance is UNSATISFIABLE
+UNSAT: inductive proof successful, property holds
+Using MiniSAT 2.2.1 with simplifier
+SAT checker: instance is UNSATISFIABLE
+UNSAT: inductive proof successful, property holds
+
+** Results:
+[bbr3_invariants.a_sched_window_has_zero] always (disable iff (bbr3_invariants.reset) bbr3_invariants.steps_since_zero < bbr3_invariants.W): ASSUMED
+[bbr3_invariants.a_burst_bounded] always (disable iff (bbr3_invariants.reset) bbr3_invariants.burst_size <= bbr3_invariants.B[7:0]): ASSUMED
+[bbr3_invariants.p_pacing_matches_bw_max] always (disable iff (bbr3_invariants.reset) bbr3_invariants.tick > 0 |-> bbr3_invariants.pacing_rate == ((bbr3_invariants.bw_filt[0] > bbr3_invariants.bw_filt[1] ? bbr3_invariants.bw_filt[0] : bbr3_invariants.bw_filt[1]) > (bbr3_invariants.bw_filt[2] > bbr3_invariants.bw_filt[3] ? bbr3_invariants.bw_filt[2] : bbr3_invariants.bw_filt[3]) ? bbr3_invariants.bw_filt[0] > bbr3_invariants.bw_filt[1] ? bbr3_invariants.bw_filt[0] : bbr3_invariants.bw_filt[1] : bbr3_invariants.bw_filt[2] > bbr3_invariants.bw_filt[3] ? bbr3_invariants.bw_filt[2] : bbr3_invariants.bw_filt[3])): PROVED
+[bbr3_invariants.p_filter_zero_implies_pacing_zero] always (disable iff (bbr3_invariants.reset) bbr3_invariants.tick > 0 && bbr3_invariants.bw_filt[0] == 1'b0 && bbr3_invariants.bw_filt[1] == 1'b0 && bbr3_invariants.bw_filt[2] == 1'b0 && bbr3_invariants.bw_filt[3] == 1'b0 |-> bbr3_invariants.pacing_rate == 1'b0): PROVED
+[bbr3_invariants.p_onset_upper_bound] always (disable iff (bbr3_invariants.reset) bbr3_invariants.tick == bbr3_invariants.ONSET_TIME |-> bbr3_invariants.pacing_rate == 1'b0 || bbr3_invariants.has_been_zero): PROVED
+[bbr3_invariants.p_filter_any_nonzero_implies_pacing_nonzero] always (disable iff (bbr3_invariants.reset) bbr3_invariants.tick > 0 && (bbr3_invariants.bw_filt[0] != 1'b0 || bbr3_invariants.bw_filt[1] != 1'b0 || bbr3_invariants.bw_filt[2] != 1'b0 || bbr3_invariants.bw_filt[3] != 1'b0) |-> bbr3_invariants.pacing_rate != 1'b0): PROVED
