@@ -84,7 +84,21 @@ telos/
 
 ## License
 
-MIT. See `LICENSE`.
+Apache-2.0. See `LICENSE`.
+
+## Citation
+
+If you use telos in your research, please cite:
+
+```bibtex
+@misc{telos2026,
+  title  = {Telos: A Reproducibility-First Specification Format for AI4Code Benchmarks},
+  author = {Yang, Aidan Z. H. and {Athanor-AI}},
+  year   = {2026},
+  url    = {https://github.com/athanor-ai/telos},
+  note   = {Apache-2.0}
+}
+```
 
 ## Contact
 

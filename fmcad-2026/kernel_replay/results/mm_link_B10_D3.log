@@ -1,0 +1,20 @@
+[inner] uid=1000
+[inner] ip addr:
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+2: sit0@NONE: <NOARP> mtu 1480 qdisc noop qlen 1000
+    link/sit 0.0.0.0 brd 0.0.0.0
+3: ingress: <POINTOPOINT,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast qlen 500
+    link/[65534] 
+    inet 10.0.0.2 peer 10.0.0.1/32 scope global ingress
+       valid_lft forever preferred_lft forever
+    inet6 fe80::bb26:c868:7695:b3d4/64 scope link tentative 
+       valid_lft forever preferred_lft forever
+[inner] ip route:
+default via 10.0.0.1 dev ingress 
+10.0.0.1 dev ingress scope link  src 10.0.0.2 
+PEAK=48041432 ONSET=NA

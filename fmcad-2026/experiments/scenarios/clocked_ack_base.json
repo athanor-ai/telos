@@ -1,0 +1,17 @@
+{
+  "links": [
+    {
+      "id": "bottleneck",
+      "rate_mbps": 100,
+      "delay_ms": 10,
+      "buffer": 128
+    }
+  ],
+  "flows": [
+    {
+      "id": "F1",
+      "cca": "bbrv3",
+      "start_s": 0.0
+    }
+  ]
+}
